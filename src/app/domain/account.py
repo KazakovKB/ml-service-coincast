@@ -3,7 +3,6 @@ from enums import TxType
 from datetime import datetime, UTC
 from typing import Sequence
 
-
 @dataclass
 class Transaction:
     owner_id: int
@@ -12,6 +11,26 @@ class Transaction:
     reason: str
     balance_after: int
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def is_deposit(self) -> bool:
+        return self.tx_type == TxType.DEPOSIT
+
+    def is_prediction_charge(self) -> bool:
+        return self.tx_type == TxType.PREDICTION_CHARGE
+
+    def as_dict(self) -> dict:
+        return {
+            "owner_id": self.owner_id,
+            "amount": self.amount,
+            "tx_type": self.tx_type.value,
+            "reason": self.reason,
+            "balance_after": self.balance_after,
+            "created_at": self.created_at.isoformat(),
+        }
+
+    def __str__(self):
+        sign = "+" if self.amount > 0 else ""
+        return f"[{self.created_at.isoformat()}] {self.tx_type.value}: {sign}{self.amount} ({self.reason}), баланс: {self.balance_after}"
 
 
 class InsufficientFunds(Exception):
@@ -47,3 +66,23 @@ class Account:
                 balance_after=self.__balance,
             )
         )
+
+if __name__ == '__main__':
+    from user import Client, Admin, User
+
+    user = Client(email="user1@mail.com", password_hash=User.hash_password("password123"))
+    admin = Admin(email="admin@mail.com", password_hash=User.hash_password("admin_password123"))
+
+    # Пополнение через администратора
+    Admin.credit_user(user=user, amount=50, reason="Welcome bonus")
+
+    # Транзакция добавилась в историю пользователя
+    last_tx = user.account.history[-1]
+    print(last_tx, end='\n\n')
+
+    # Можно проверить тип транзакции
+    print(f"is_deposit: {last_tx.is_deposit()}")
+    print(f"is_prediction_charge: {last_tx.is_prediction_charge()}", end='\n\n')
+
+    # Преобразовать для API/UI
+    print(last_tx.as_dict())
