@@ -26,10 +26,17 @@ ml-service-coincast/
 │       │
 │       ├── api/                  # Слой взаимодействия с пользователем
 │       │   ├── __init__.py
+│       │ 
+│       ├── Dockerfile
+│       ├── main.py
+│       └── requirements.txt
 │       ... ...
 │
+├── nginx
+│   └── nginx.conf
+│
 ├── README.md
-├── .gitignore
-└── requirements.txt
+├── docker-compose.yml
+└── .gitignore
 ```
 
