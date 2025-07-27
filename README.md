@@ -26,9 +26,17 @@ ml-service-coincast/
 │       │
 │       ├── api/                  # Слой взаимодействия с пользователем
 │       │   ├── __init__.py
-│       │ 
+│       │   └── ...
+│       │
+│       ├── infra/             
+│       │   ├── __init__.py
+│       │   ├── db.py
+│       │   └── models.py         
+│       │
 │       ├── Dockerfile
 │       ├── main.py
+│       ├── test_integration.py
+│       ├── init_db.py
 │       └── requirements.txt
 │       ... ...
 │
@@ -36,6 +44,8 @@ ml-service-coincast/
 │   └── nginx.conf
 │
 ├── README.md
+├── Makefile
+├── .env.template
 ├── docker-compose.yml
 └── .gitignore
 ```

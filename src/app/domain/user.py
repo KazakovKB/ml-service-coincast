@@ -1,32 +1,37 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from abc import ABC
 from datetime import datetime, UTC
-from enums import Role, TxType
-from account import Account
+from domain.enums import Role, TxType
+from domain.account import Account
 import bcrypt
 
 
 # === User ===
 class User(ABC):
     """Базовый пользователь."""
-    __id_counter: int = 1
 
     def __init__(self, email: str, password_hash: str) -> None:
-        self.id: int = User.__id_counter
-        User.__id_counter += 1
+        self.id: int | None = None
         self.email: str = email
         self.__password_hash: str = password_hash
         self.created_at: datetime = datetime.now(UTC)
-        self.account: Account = Account(owner_id=self.id)
+        self.account: Account | None = None
 
     # проверка пароля
     def check_password(self, plain: str) -> bool:
         return bcrypt.checkpw(plain.encode(), self.__password_hash.encode())
 
     @property
+    def password_hash(self):
+        return self.__password_hash
+
+    @property
     def role(self) -> Role:
         return Role.CLIENT
 
-    # запрет прямого доступа
     def _change_balance(self, delta: int, reason: str, tx_type: TxType) -> None:
         self.account.apply(delta, reason, tx_type)
 

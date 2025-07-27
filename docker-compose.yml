@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src/app:/app
+      - ./src/app:/src/app
     depends_on:
       - database
       - rabbitmq
@@ -23,7 +23,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
   rabbitmq:
-    image: rabbitmq:4.1.2
+    image: rabbitmq:4.1.2-management
     container_name: ml_rabbitmq
     ports:
       - "15672:15672"
@@ -39,6 +39,30 @@ services:
       - .env
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  init-db:
+    build:
+      context: ./src/app
+    env_file:
+      - .env
+    command: python init_db.py
+    volumes:
+      - ./src:/src
+    depends_on:
+      - database
+      - rabbitmq
+
+  tests:
+    build:
+      context: ./src/app
+    env_file:
+      - .env
+    command: pytest -q test_integration.py
+    volumes:
+      - ./src:/src
+    depends_on:
+      - database
+      - rabbitmq
 
 volumes:
   pgdata:
