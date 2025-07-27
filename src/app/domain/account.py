@@ -1,5 +1,9 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from dataclasses import dataclass, field
-from enums import TxType
+from domain.enums import TxType
 from datetime import datetime, UTC
 from typing import Sequence
 
