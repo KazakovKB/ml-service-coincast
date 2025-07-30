@@ -1,10 +1,6 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
-from infra.db import engine, SessionLocal
-from infra.models import ORMUser, ORMAccount, Base
-from domain.user import Client, Admin
+from src.app.infra.db import engine, SessionLocal
+from src.app.infra.models import ORMUser, ORMAccount, Base
+from src.app.domain.user import Client, Admin
 from sqlalchemy.exc import IntegrityError
 import logging
 
@@ -19,7 +15,7 @@ def main():
 
     for dom in (demo_user, demo_admin):
         orm = ORMUser(email=dom.email,
-                      password_hash=dom.password_hash,
+                      password=dom.password,
                       role=dom.role)
         db.add(orm)
         try:

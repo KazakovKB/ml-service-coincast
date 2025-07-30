@@ -1,12 +1,13 @@
 services:
   app:
     build:
-      context: ./src/app
+      context: .
+      dockerfile: src/app/Dockerfile
     container_name: ml_app
     env_file:
       - .env
     volumes:
-      - ./src/app:/src/app
+      - ./src:/src/src
     depends_on:
       - database
       - rabbitmq
@@ -42,24 +43,26 @@ services:
 
   init-db:
     build:
-      context: ./src/app
+      context: .
+      dockerfile: src/app/Dockerfile
     env_file:
       - .env
-    command: python init_db.py
+    command: python -m src.app.init_db
     volumes:
-      - ./src:/src
+      - ./src:/src/src
     depends_on:
       - database
       - rabbitmq
 
   tests:
     build:
-      context: ./src/app
+      context: .
+      dockerfile: src/app/Dockerfile
     env_file:
       - .env
-    command: pytest -q test_integration.py
+    command: pytest -q src/app/test_integration.py
     volumes:
-      - ./src:/src
+      - ./src:/src/src
     depends_on:
       - database
       - rabbitmq

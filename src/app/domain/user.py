@@ -1,11 +1,7 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from abc import ABC
 from datetime import datetime, UTC
-from domain.enums import Role, TxType
-from domain.account import Account
+from src.app.domain.enums import Role, TxType
+from src.app.domain.account import Account
 import bcrypt
 
 
@@ -13,20 +9,20 @@ import bcrypt
 class User(ABC):
     """Базовый пользователь."""
 
-    def __init__(self, email: str, password_hash: str) -> None:
+    def __init__(self, email: str, password: str) -> None:
         self.id: int | None = None
         self.email: str = email
-        self.__password_hash: str = password_hash
+        self.__password: str = password
         self.created_at: datetime = datetime.now(UTC)
         self.account: Account | None = None
 
     # проверка пароля
     def check_password(self, plain: str) -> bool:
-        return bcrypt.checkpw(plain.encode(), self.__password_hash.encode())
+        return bcrypt.checkpw(plain.encode(), self.__password.encode())
 
     @property
-    def password_hash(self):
-        return self.__password_hash
+    def password(self):
+        return self.__password
 
     @property
     def role(self) -> Role:
@@ -67,7 +63,7 @@ if __name__ == '__main__':
     # Пользователь регистрируется
     raw_password = "password123"
     hashed_password = User.hash_password(raw_password)
-    user = Client(email="user1@example.ru", password_hash=hashed_password)
+    user = Client(email="user1@example.ru", password=hashed_password)
 
     # Пользователь вводит email + пароль для входа
     login_attempt = input('Enter password:')
