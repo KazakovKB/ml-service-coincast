@@ -1,15 +1,11 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from dataclasses import dataclass, field
-from domain.enums import TxType
+from src.app.domain.enums import TxType
 from datetime import datetime, UTC
 from typing import Sequence
 
 @dataclass
 class Transaction:
-    owner_id: int
+    account_id: int
     amount: int
     tx_type: TxType
     reason: str
@@ -24,7 +20,7 @@ class Transaction:
 
     def as_dict(self) -> dict:
         return {
-            "owner_id": self.owner_id,
+            "account_id": self.account_id,
             "amount": self.amount,
             "tx_type": self.tx_type.value,
             "reason": self.reason,
@@ -44,6 +40,7 @@ class InsufficientFunds(Exception):
 class Account:
     """Кошелёк в условных кредитах."""
     def __init__(self, owner_id: int) -> None:
+        self.id: int | None = None
         self.owner_id = owner_id
         self.__balance: int = 0
         self.__history: list[Transaction] = []
@@ -63,7 +60,7 @@ class Account:
         self.__balance = new_balance
         self.__history.append(
             Transaction(
-                owner_id=self.owner_id,
+                account_id=self.id,
                 amount=delta,
                 tx_type=tx_type,
                 reason=reason,
@@ -74,8 +71,8 @@ class Account:
 if __name__ == '__main__':
     from user import Client, Admin, User
 
-    user = Client(email="user1@mail.com", password_hash=User.hash_password("password123"))
-    admin = Admin(email="admin@mail.com", password_hash=User.hash_password("admin_password123"))
+    user = Client(email="user1@mail.com", password=User.hash_password("password123"))
+    admin = Admin(email="admin@mail.com", password=User.hash_password("admin_password123"))
 
     # Пополнение через администратора
     Admin.credit_user(user=user, amount=50, reason="Welcome bonus")
