@@ -4,3 +4,5 @@ uvicorn[standard]==0.35.0
 sqlalchemy==2.0.41
 pytest==8.4.1
 psycopg2-binary==2.9.10
+python-jose==3.5.0
+python-multipart==0.0.20

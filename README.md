@@ -22,16 +22,28 @@ ml-service-coincast/
 │       │
 │       ├── services/             # Оркестрация бизнес-сценариев
 │       │   ├── __init__.py
+│       │   ├── account_service.py
+│       │   ├── auth_service.py
+│       │   ├── prediction_service.py
 │       │   └── ml_service.py         # Фасад веб-сервиса
 │       │
 │       ├── api/                  # Слой взаимодействия с пользователем
-│       │   ├── __init__.py
-│       │   └── ...
+│       │   ├── __init__.py          # включает все роутеры
+│       │   ├── deps.py              # DI-зависимости (DB, current_user)
+│       │   ├── auth.py              # регистрация / авторизация
+│       │   ├── account.py           # баланс, пополнение
+│       │   ├── prediction.py        # отправка данных и история
+│       │   └── schemas.py           # Pydantic
 │       │
 │       ├── infra/             
 │       │   ├── __init__.py
 │       │   ├── db.py
 │       │   └── models.py         
+│       │
+│       ├── bot/
+│       │   ├── __init__.py      
+│       │   ├── client.py            # REST-клиент -> FastAPI
+│       │   └── main.py              # aiogram-бот
 │       │
 │       ├── Dockerfile
 │       ├── main.py

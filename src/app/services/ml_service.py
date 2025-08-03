@@ -34,7 +34,7 @@ class MLService:
         predictions = self.__models[model_name].predict(vr.valid_rows)
 
         job = PredictionJob(
-            user_id=user.id,
+            owner_id=user.id,
             model_name=model_name,
             valid_input=vr.valid_rows,
             predictions=predictions,
