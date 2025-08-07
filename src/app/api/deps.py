@@ -18,13 +18,16 @@ ALGO   = os.getenv('ALGO')
 oauth2  = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db():
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except:
+        db.rollback()
+        raise
     finally:
         db.close()
-
 
 # JWT хелперы
 def create_token(user_id: int) -> str:
