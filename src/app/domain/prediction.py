@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Sequence, Any, Tuple
 from datetime import datetime, UTC
+from src.app.domain.enums import JobStatus
 
 
 @dataclass
@@ -13,6 +14,8 @@ class PredictionJob:
     cost: int
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: int | None = None
+    status: JobStatus = JobStatus.OK
+    error: str | None = None
 
     def n_valid(self) -> int:
         return len(self.valid_input)

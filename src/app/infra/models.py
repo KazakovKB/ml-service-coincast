@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime, UTC
-from src.app.domain.enums import Role, TxType
+from src.app.domain.enums import Role, TxType, JobStatus
 
 Base = declarative_base()
 
@@ -50,5 +50,7 @@ class ORMPredictionJob(Base):
     invalid_rows  = Column(JSON, nullable=False)
     cost          = Column(Integer, nullable=False)
     created_at    = Column(DateTime, default=datetime.now(UTC))
+    status        = Column(Enum(JobStatus), default=JobStatus.OK)
+    error         = Column(String, nullable=True)
 
     user          = relationship("ORMUser", back_populates="prediction_jobs")

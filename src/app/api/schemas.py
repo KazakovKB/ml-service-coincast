@@ -1,7 +1,7 @@
 from pydantic import BaseModel, conint
 from datetime import datetime
 from typing import List, Any, Tuple
-from src.app.domain.enums import TxType
+from src.app.domain.enums import TxType, JobStatus
 
 class UserCreate(BaseModel):
     email: str
@@ -29,6 +29,8 @@ class PredictionOut(BaseModel):
     invalid_rows: List[Tuple[int, Any]]
     cost: int
     created_at: datetime
+    status: JobStatus
+    error: str | None = None
 
     class Config:
         orm_mode = True
@@ -38,6 +40,7 @@ class PredictionShort(BaseModel):
     model_name: str
     cost: int
     created_at: datetime
+    status: JobStatus
 
 class TransactionOut(BaseModel):
     amount: int

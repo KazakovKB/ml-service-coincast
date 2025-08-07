@@ -1,30 +1,38 @@
+import os
 from datetime import datetime, UTC
 from typing import List, Dict, Any
 
+from src.app.domain.enums import TxType, JobStatus
 from src.app.domain.account import Account
-from src.app.domain.enums import TxType
 from src.app.domain.prediction import PredictionJob
 from src.app.domain.validation import Validator
 from src.app.infra.repositories import AccountRepo, PredictionRepo
 
-import os
+COST_PER_ROW: int = int(os.getenv("COST_PER_ROW"))
 
-COST_PER_ROW = os.getenv('COST_PER_ROW')
 
 class PredictionService:
     """
-    - валидирует входные данные
-    - вызывает ML-модель (заглушка)
-    - списывает кредиты
-    - сохраняет PredictionJob в БД через PredictionRepo
+    - валидирует данные
+    - вызывает ML-модель
+    - при успехе списывает кредиты
+    - всегда сохраняет PredictionJob со статусом OK / ERROR
     """
 
     class NotEnoughCredits(Exception): ...
+    class ModelError(Exception): ...
 
     def __init__(self, acc_repo: AccountRepo, pred_repo: PredictionRepo):
-        self._acc_repo = acc_repo
+        self._acc_repo  = acc_repo
         self._pred_repo = pred_repo
         self._validator = Validator()
+
+    def _run_model(self, name: str, rows: list[dict]) -> list[float]:
+        try:
+            # здесь будет вызов gRPC к реальной модели
+            return [0.0] * len(rows)
+        except Exception as exc:
+            raise PredictionService.ModelError(str(exc)) from exc
 
     def make_prediction(
         self,
@@ -33,34 +41,48 @@ class PredictionService:
         raw_rows: List[Dict[str, Any]],
     ) -> PredictionJob:
 
-        # валидация
-        res = self._validator.validate(raw_rows)
-
-        # стоимость
-        cost = int(len(res.valid_rows) * COST_PER_ROW)
+        res  = self._validator.validate(raw_rows)
+        cost = len(res.valid_rows) * COST_PER_ROW
         if user.account.balance < cost:
             raise PredictionService.NotEnoughCredits
 
-        # «предсказание» (заглушка)
-        preds = [0.0] * len(res.valid_rows)
+        session = self._acc_repo.session
 
-        # списываем средства
-        acc: Account = self._acc_repo.load(user.account.id)
-        acc.apply(-cost, f"Prediction {model_name}", TxType.PREDICTION_CHARGE)
-        self._acc_repo.save(acc)
+        with session.begin_nested():
+            try:
+                preds = self._run_model(model_name, res.valid_rows)
 
-        # сохраняем PredictionJob
-        job = PredictionJob(
-            owner_id=user.id,
-            model_name=model_name,
-            valid_input=res.valid_rows,
-            predictions=preds,
-            invalid_rows=res.invalid_rows,
-            cost=cost,
-            created_at=datetime.now(UTC),
-        )
-        return self._pred_repo.add(job)
+                acc: Account = self._acc_repo.load(user.account.id)
+                acc.apply(-cost, f"Prediction {model_name}", TxType.PREDICTION_CHARGE)
+                self._acc_repo.save(acc)
+
+                job = PredictionJob(
+                    owner_id     = user.id,
+                    model_name   = model_name,
+                    valid_input  = res.valid_rows,
+                    predictions  = preds,
+                    invalid_rows = res.invalid_rows,
+                    cost         = cost,
+                    status       = JobStatus.OK,
+                    created_at   = datetime.now(UTC),
+                )
+
+            except PredictionService.ModelError as err:
+                job = PredictionJob(
+                    owner_id     = user.id,
+                    model_name   = model_name,
+                    valid_input  = res.valid_rows,
+                    predictions  = [],
+                    invalid_rows = res.invalid_rows,
+                    cost         = 0,
+                    status       = JobStatus.ERROR,
+                    error        = str(err),
+                    created_at   = datetime.now(UTC),
+                )
+
+            job = self._pred_repo.add(job)
+
+        return job
 
     def history(self, user_id: int) -> list[PredictionJob]:
-        """Список всех PredictionJob пользователя."""
         return self._pred_repo.list_by_user(user_id)
