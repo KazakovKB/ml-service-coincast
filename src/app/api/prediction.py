@@ -2,38 +2,36 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.app.api.schemas import PredictionIn, PredictionOut, PredictionShort
 from src.app.api.deps import get_current_user, get_db
-from src.app.domain.enums import JobStatus
+from src.app.infra.mq import rpc_call
 from src.app.services.prediction_service import PredictionService
 from src.app.infra.repositories import AccountRepo, PredictionRepo
 
 
 router = APIRouter(prefix="/predict", tags=["Prediction"])
 
-
 @router.post("/", response_model=PredictionOut, status_code=201)
-def predict(
+async def predict(
     payload: PredictionIn,
     user = Depends(get_current_user),
-    db   = Depends(get_db),
 ):
-    svc = PredictionService(AccountRepo(db), PredictionRepo(db))
+    # отправляем задачу и ждём ответ
+    result = await rpc_call(
+        {
+            "user_id":    user.id,
+            "account_id": user.account.id,
+            "model":      payload.model_name,
+            "data":       payload.data,
+        }
+    )
 
-    try:
-        job = svc.make_prediction(user, payload.model_name, payload.data)
+    # обработка ошибок
+    if result.get("status") == "error":
+        detail = result.get("error", "Model inference failed")
+        if detail == "not_enough_credits":
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail)
 
-        if job.status is JobStatus.ERROR:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=job.error or "Model inference failed",
-            )
-
-        return job
-
-    except PredictionService.NotEnoughCredits:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Not enough credits",
-        )
+    return result
 
 
 @router.get("/history", response_model=list[PredictionShort])

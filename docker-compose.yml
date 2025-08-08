@@ -31,7 +31,14 @@ services:
       - "5672:5672"
     volumes:
       - rabbitdata:/var/lib/rabbitmq
-    restart: on-failure
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+    restart: unless-stopped
 
   database:
     image: postgres:16
@@ -48,6 +55,21 @@ services:
     env_file: .env
     depends_on:
       - app
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/app/Dockerfile
+    command: python -m src.app.worker.worker
+    volumes:
+      - ./src:/src/src
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env
+    restart: unless-stopped
+    scale: 3
 
   init-db:
     build:

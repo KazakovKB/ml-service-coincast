@@ -9,7 +9,7 @@ class ValidationResult:
 
 
 class Validator:
-    """Разделяет валидные и ошибочные записи."""
+    """ Разделить валидные и ошибочные записи """
 
     @staticmethod
     def validate(raw: Sequence[Dict[str, Any]]) -> ValidationResult:
