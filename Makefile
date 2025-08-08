@@ -2,7 +2,7 @@
 
 # Поднять все сервисы (без init-db и tests)
 up:
-	docker compose up -d --build database rabbitmq app web-proxy bot
+	docker compose up -d --build database rabbitmq app web-proxy bot worker
 
 # Запустить тесты
 tests:

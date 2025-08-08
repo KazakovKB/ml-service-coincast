@@ -13,10 +13,9 @@ COST_PER_ROW: int = int(os.getenv("COST_PER_ROW"))
 
 class PredictionService:
     """
-    - валидирует данные
-    - вызывает ML-модель
-    - при успехе списывает кредиты
-    - всегда сохраняет PredictionJob со статусом OK / ERROR
+    • валидирует данные
+    • выполняет инференс
+    • атомарно списывает средства и фиксирует PredictionJob
     """
 
     class NotEnoughCredits(Exception): ...
@@ -27,9 +26,10 @@ class PredictionService:
         self._pred_repo = pred_repo
         self._validator = Validator()
 
+    # вызов модели (заглушка)
     def _run_model(self, name: str, rows: list[dict]) -> list[float]:
         try:
-            # здесь будет вызов gRPC к реальной модели
+            # TODO: заменить на gRPC реальной модели
             return [0.0] * len(rows)
         except Exception as exc:
             raise PredictionService.ModelError(str(exc)) from exc
@@ -43,7 +43,9 @@ class PredictionService:
 
         res  = self._validator.validate(raw_rows)
         cost = len(res.valid_rows) * COST_PER_ROW
-        if user.account.balance < cost:
+
+        acc: Account = self._acc_repo.load(user.account.id)
+        if acc.balance < cost:
             raise PredictionService.NotEnoughCredits
 
         session = self._acc_repo.session
@@ -52,8 +54,11 @@ class PredictionService:
             try:
                 preds = self._run_model(model_name, res.valid_rows)
 
-                acc: Account = self._acc_repo.load(user.account.id)
-                acc.apply(-cost, f"Prediction {model_name}", TxType.PREDICTION_CHARGE)
+                acc.apply(
+                    -cost,
+                    f"Prediction {model_name}",
+                    TxType.PREDICTION_CHARGE,
+                )
                 self._acc_repo.save(acc)
 
                 job = PredictionJob(
