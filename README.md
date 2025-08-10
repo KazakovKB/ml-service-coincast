@@ -38,10 +38,18 @@ ml-service-coincast/
 │       ├── infra/             
 │       │   ├── __init__.py
 │       │   ├── db.py
-│       │   └── models.py         
+│       │   ├── mq.py
+│       │   ├── repositories.py.py
+│       │   └── models.py        
+│       │
+│       ├── worker/             
+│       │   ├── __init__.py
+│       │   └── worker.py        
 │       │
 │       ├── bot/
 │       │   ├── __init__.py      
+│       │   ├── Dockerfile
+│       │   ├── requirements.txt
 │       │   ├── client.py            # REST-клиент -> FastAPI
 │       │   └── main.py              # aiogram-бот
 │       │

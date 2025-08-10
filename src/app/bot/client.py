@@ -67,3 +67,6 @@ class ApiClient:
 
     async def pred_history(self) -> List[Dict]:
         return await self._request("GET", "/predict/history")
+
+    async def pred_job(self, job_id: int) -> Dict:
+        return await self._request("GET", f"/predict/{job_id}")

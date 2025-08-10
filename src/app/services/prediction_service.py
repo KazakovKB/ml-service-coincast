@@ -28,6 +28,9 @@ class PredictionService:
         except Exception as exc:
             raise PredictionService.ModelError(str(exc)) from exc
 
+    def create_pending_job(self, *, owner_id: int, model_name: str) -> PredictionJob:
+        return self._pred_repo.create_pending(owner_id=owner_id, model_name=model_name)
+
     def _charge_and_save_ok(
         self,
         *,
@@ -38,12 +41,10 @@ class PredictionService:
         invalid_rows: List[Dict[str, Any]],
         predictions: List[float],
     ) -> None:
-        """Списание средств + фиксация успешного результата в рамках одной транзакции."""
         cost = len(valid_rows) * COST_PER_ROW
 
         acc: Account = self._acc_repo.load(account_id)
         if acc.balance < cost:
-            # помечаем джобу как ошибочную
             self._pred_repo.mark_error(job_id, "not_enough_credits")
             raise PredictionService.NotEnoughCredits
 
@@ -65,8 +66,6 @@ class PredictionService:
         model_name: str,
         raw_rows: List[Dict[str, Any]],
     ) -> PredictionJob:
-
-        # валидация
         res = self._validator.validate(raw_rows)
 
         # создаём pending-запись сразу, чтобы всегда была история
@@ -76,8 +75,6 @@ class PredictionService:
         with session.begin_nested():
             try:
                 preds = self._run_model(model_name, res.valid_rows)
-
-                # списание + успешное завершение
                 self._charge_and_save_ok(
                     account_id=user.account.id,
                     job_id=pending.id,
@@ -86,13 +83,12 @@ class PredictionService:
                     invalid_rows=res.invalid_rows,
                     predictions=preds,
                 )
-
             except PredictionService.ModelError as err:
                 self._pred_repo.mark_error(pending.id, str(err))
 
         return self._pred_repo.get(pending.id)
 
-    def process_job(
+    def process_existing_job(
         self,
         *,
         job_id: int,
@@ -100,17 +96,13 @@ class PredictionService:
         model_name: str,
         raw_rows: List[Dict[str, Any]],
     ) -> PredictionJob:
-        """
-        Вызывается воркером: получает job_id и данные, валидирует, инференсит,
-        списывает и помечает job OK/ERROR.
-        """
+        """Воркер валидирует, инференсит, списывает и помечает job OK/ERROR."""
         res = self._validator.validate(raw_rows)
 
         session = self._acc_repo.session
         with session.begin_nested():
             try:
                 preds = self._run_model(model_name, res.valid_rows)
-
                 self._charge_and_save_ok(
                     account_id=account_id,
                     job_id=job_id,
@@ -119,13 +111,15 @@ class PredictionService:
                     invalid_rows=res.invalid_rows,
                     predictions=preds,
                 )
-
             except PredictionService.NotEnoughCredits:
+                # уже помечено как error в _charge_and_save_ok
                 raise
             except PredictionService.ModelError as err:
                 self._pred_repo.mark_error(job_id, str(err))
 
         return self._pred_repo.get(job_id)
+
+    process_job = process_existing_job
 
     def history(self, user_id: int) -> list[PredictionJob]:
         return self._pred_repo.list_by_user(user_id)
