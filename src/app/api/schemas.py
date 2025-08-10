@@ -1,4 +1,4 @@
-from pydantic import BaseModel, conint
+from pydantic import BaseModel, conint, ConfigDict
 from datetime import datetime
 from typing import List, Any, Tuple
 from src.app.domain.enums import TxType, JobStatus
@@ -41,6 +41,8 @@ class PredictionShort(BaseModel):
     cost: int
     created_at: datetime
     status: JobStatus
+
+    model_config = ConfigDict(from_attributes=True)
 
 class TransactionOut(BaseModel):
     amount: int

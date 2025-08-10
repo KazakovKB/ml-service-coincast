@@ -146,6 +146,9 @@ class PredictionRepo:
 
     def get(self, job_id: int) -> Optional[PredictionJob]:
         orm = self._s.get(ORMPredictionJob, job_id)
+        if orm is None:
+            return None
+
         return self._to_domain(orm)
 
     def list_by_user(self, user_id: int) -> List[PredictionJob]:

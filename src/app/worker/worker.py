@@ -1,4 +1,4 @@
-import os, json, logging, types, asyncio
+import os, json, logging, asyncio
 from sqlalchemy.orm import Session
 from faststream.rabbit import RabbitBroker
 from faststream import FastStream
@@ -16,32 +16,40 @@ broker = RabbitBroker(RABBIT_URL)
 app = FastStream(broker)
 
 @broker.subscriber(QUEUE_NAME)
-async def handle(body: str) -> str:
+async def handle(body: str) -> None:
     payload = json.loads(body)
+    job_id     = payload["job_id"]
+    account_id = payload["account_id"]
+    model_name = payload["model"]
+    rows       = payload["data"]
     db: Session = SessionLocal()
     svc = PredictionService(AccountRepo(db), PredictionRepo(db))
 
     try:
-        job = svc.make_prediction(
-            user=types.SimpleNamespace(
-                id=payload["user_id"],
-                account=types.SimpleNamespace(id=payload["account_id"]),
-            ),
-            model_name=payload["model"],
-            raw_rows=payload["data"],
+        job = svc.process_job(
+            job_id=job_id,
+            account_id=account_id,
+            model_name=model_name,
+            raw_rows=rows,
         )
         db.commit()
-        return json.dumps(job.__dict__, default=str)
+        logging.info("job %s done: status=%s cost=%s", job.id, job.status, job.cost)
 
     except PredictionService.NotEnoughCredits:
-        db.rollback()
-        return json.dumps({"status": "error", "error": "not_enough_credits"})
+        db.commit()
+        logging.warning("job %s failed: not enough credits", job_id)
+
     except Exception as exc:
-        db.rollback()
-        logging.exception("worker error")
-        return json.dumps({"status": "error", "error": str(exc)})
+        logging.exception("job %s failed with unexpected error", job_id)
+        try:
+            PredictionRepo(db).mark_error(job_id, f"worker_error: {exc}")
+            db.commit()
+        except Exception:
+            db.rollback()
+
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     asyncio.run(app.run())
