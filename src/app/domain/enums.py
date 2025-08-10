@@ -11,3 +11,4 @@ class TxType(StrEnum):
 class JobStatus(StrEnum):
     OK = "OK"
     ERROR = "ERROR"
+    PENDING = "PENDING"

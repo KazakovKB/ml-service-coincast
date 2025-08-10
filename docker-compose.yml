@@ -9,8 +9,10 @@ services:
     volumes:
       - ./src:/src/src
     depends_on:
-      - database
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      database:
+        condition: service_started
 
   web-proxy:
     image: nginx:1.29.0
