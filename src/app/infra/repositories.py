@@ -1,10 +1,12 @@
-from typing import Optional, List
+from typing import Optional, List, Any
+from datetime import datetime, UTC
+
 from sqlalchemy.orm import Session
 from src.app.infra.models import ORMUser, ORMAccount, ORMTransaction, ORMPredictionJob
 from src.app.domain.user import Client, Admin
 from src.app.domain.account import Account
 from src.app.domain.prediction import PredictionJob
-from src.app.domain.enums import Role, TxType
+from src.app.domain.enums import Role, TxType, JobStatus
 
 # ORM < - > Domain сопоставление
 
@@ -110,6 +112,22 @@ class PredictionRepo:
     def __init__(self, s: Session) -> None:
         self._s = s
 
+    def create_pending(self, *, owner_id: int, model_name: str) -> PredictionJob:
+        orm = ORMPredictionJob(
+            owner_id     = owner_id,
+            model_name   = model_name,
+            valid_input  = [],
+            predictions  = [],
+            invalid_rows = [],
+            cost         = 0,
+            status       = JobStatus.PENDING,
+            error        = None,
+            created_at   = datetime.now(UTC),
+        )
+        self._s.add(orm)
+        self._s.flush()
+        return self._to_domain(orm)
+
     def add(self, job: PredictionJob) -> PredictionJob:
         orm = ORMPredictionJob(
             owner_id     = job.owner_id,
@@ -124,19 +142,11 @@ class PredictionRepo:
         )
         self._s.add(orm)
         self._s.flush()
+        return self._to_domain(orm)
 
-        return PredictionJob(
-            id            = orm.id,
-            owner_id      = orm.owner_id,
-            model_name    = orm.model_name,
-            valid_input   = orm.valid_input,
-            predictions   = orm.predictions,
-            invalid_rows  = orm.invalid_rows,
-            cost          = orm.cost,
-            status        = orm.status,
-            error         = orm.error,
-            created_at    = orm.created_at,
-        )
+    def get(self, job_id: int) -> Optional[PredictionJob]:
+        orm = self._s.get(ORMPredictionJob, job_id)
+        return self._to_domain(orm)
 
     def list_by_user(self, user_id: int) -> List[PredictionJob]:
         rows = (
@@ -145,18 +155,51 @@ class PredictionRepo:
             .order_by(ORMPredictionJob.created_at.desc())
             .all()
         )
-        return [
-            PredictionJob(
-                id           = r.id,
-                owner_id     = r.owner_id,
-                model_name   = r.model_name,
-                valid_input  = r.valid_input,
-                predictions  = r.predictions,
-                invalid_rows = r.invalid_rows,
-                cost         = r.cost,
-                status       = r.status,
-                error        = r.error,
-                created_at   = r.created_at,
-            )
-            for r in rows
-        ]
+        return [self._to_domain(r) for r in rows]
+
+    def mark_ok(
+        self,
+        job_id: int,
+        *,
+        predictions: List[Any],
+        cost: int,
+        valid_input: Optional[List[Any]] = None,
+        invalid_rows: Optional[List[Any]] = None,
+    ) -> None:
+        orm = self._s.get(ORMPredictionJob, job_id)
+        if orm is None:
+            raise ValueError(f"PredictionJob {job_id} not found")
+
+        orm.predictions = predictions
+        orm.cost = cost
+        if valid_input is not None:
+            orm.valid_input = valid_input
+        if invalid_rows is not None:
+            orm.invalid_rows = invalid_rows
+        orm.status = JobStatus.OK
+        orm.error = None
+        self._s.flush()
+
+    def mark_error(self, job_id: int, error: str) -> None:
+        orm = self._s.get(ORMPredictionJob, job_id)
+        if orm is None:
+            raise ValueError(f"PredictionJob {job_id} not found")
+
+        orm.status = JobStatus.ERROR
+        orm.error = error
+        self._s.flush()
+
+    @staticmethod
+    def _to_domain(orm: ORMPredictionJob) -> PredictionJob:
+        return PredictionJob(
+            id           = orm.id,
+            owner_id     = orm.owner_id,
+            model_name   = orm.model_name,
+            valid_input  = orm.valid_input,
+            predictions  = orm.predictions,
+            invalid_rows = orm.invalid_rows,
+            cost         = orm.cost,
+            status       = orm.status,
+            error        = orm.error,
+            created_at   = orm.created_at,
+        )
