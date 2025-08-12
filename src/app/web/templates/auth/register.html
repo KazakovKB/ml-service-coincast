@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block title %}Create account · ML-Service-Coincast{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-6">Create account</h2>
+
+{% if info %}
+  {% set message = info %}
+  {% set tone = 'info' %}
+  {% include "partials/_alert.html" %}
+{% endif %}
+
+{% if error %}
+  {% set message = error %}
+  {% set tone = 'error' %}
+  {% include "partials/_alert.html" %}
+{% endif %}
+
+<form method="post" class="space-y-4 max-w-sm">
+  <input type="hidden" name="next" value="{{ next or '/' }}"/>
+
+  <div>
+    <label class="block mb-1 text-sm font-medium text-gray-700">Email</label>
+    <input type="email" name="email" required class="w-full rounded-md border p-2">
+  </div>
+
+  <div>
+    <label class="block mb-1 text-sm font-medium text-gray-700">Password</label>
+    <input type="password" name="password" required class="w-full rounded-md border p-2">
+  </div>
+
+  <div class="flex items-center gap-3">
+    <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
+      Create account
+    </button>
+    <a href="/login?next={{ next or '/' }}"
+       class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">
+      Back to login
+    </a>
+  </div>
+</form>
+{% endblock %}

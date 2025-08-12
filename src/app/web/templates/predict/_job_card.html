@@ -1,0 +1,112 @@
+{# Авто-обновляемая карточка джобы. Для PENDING ставим авто-пуллинг. #}
+<div id="job-card-{{ job.id }}"
+     class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+     {% if job.status == 'PENDING' %}
+     hx-get="/job/{{ job.id }}"
+     hx-trigger="load, every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  <div class="flex items-start justify-between">
+    <div>
+      <h3 class="text-lg font-semibold">Job #{{ job.id }}</h3>
+      <p class="text-sm text-gray-500">
+        {{ job.created_at[:19] if job.created_at else '' }}
+      </p>
+    </div>
+
+    <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium
+      {% if job.status == 'OK' %} bg-green-100 text-green-800
+      {% elif job.status == 'ERROR' %} bg-red-100 text-red-800
+      {% else %} bg-yellow-100 text-yellow-800
+      {% endif %}">
+      Status: {{ job.status }}
+    </span>
+  </div>
+
+  {# безопасные счетчики #}
+  {% set _vrows = job.valid_input | default([]) %}
+  {% if (_vrows | length) == 0 and (job.predictions | default([])) %}
+    {% set _vrows = job.predictions %}
+  {% endif %}
+  {% set _vcount = _vrows | length %}
+  {% set _icount = (job.invalid_rows | default([])) | length %}
+
+  <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+    <div class="rounded-md bg-gray-50 p-3">
+      <div class="text-xs text-gray-500">Model</div>
+      <div class="font-medium">{{ job.model_name }}</div>
+    </div>
+    <div class="rounded-md bg-gray-50 p-3">
+      <div class="text-xs text-gray-500">Cost</div>
+      <div class="font-medium">{{ job.cost or 0 }}</div>
+    </div>
+    <div class="rounded-md bg-gray-50 p-3">
+      <div class="text-xs text-gray-500">Valid rows</div>
+      <div class="font-medium">{{ _vcount }}</div>
+    </div>
+    <div class="rounded-md bg-gray-50 p-3">
+      <div class="text-xs text-gray-500">Invalid rows</div>
+      <div class="font-medium">{{ _icount }}</div>
+    </div>
+  </div>
+
+  {% if job.status == 'OK' %}
+    {% set preds = job.predictions or [] %}
+    <div class="mt-4">
+      <details class="rounded-md bg-gray-50 p-3" open>
+        <summary class="cursor-pointer text-sm text-gray-700">
+          Predictions ({{ preds|length }}) — click to collapse
+        </summary>
+        <div class="mt-2 overflow-x-auto rounded-md border bg-white p-3 text-sm">
+          {% if preds %}
+            <pre class="whitespace-pre-wrap">{{ preds }}</pre>
+          {% else %}
+            <div class="text-gray-500">No predictions</div>
+          {% endif %}
+        </div>
+      </details>
+    </div>
+  {% elif job.status == 'ERROR' %}
+    <div class="mt-4">
+      <div class="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div class="font-medium">Error</div>
+        <pre class="mt-1 whitespace-pre-wrap">{{ job.error or 'unknown' }}</pre>
+      </div>
+    </div>
+  {% else %}
+    <div class="mt-4 text-sm text-gray-600">
+      Your job is processing… this card will refresh automatically.
+    </div>
+  {% endif %}
+
+  {# Блок с invalid rows (всегда показываем, если есть) #}
+  {% set inv = job.invalid_rows | default([]) %}
+  {% if inv and (inv | length) > 0 %}
+    <div class="mt-4">
+      <details class="rounded-md bg-gray-50 p-3">
+        <summary class="cursor-pointer text-sm text-gray-700">
+          Invalid rows ({{ inv|length }}) — click to view
+        </summary>
+        <div class="mt-2 overflow-x-auto rounded-md border bg-white p-3 text-sm">
+          {% for pair in inv %}
+            {% if pair is iterable and (pair|length) == 2 %}
+              {% set idx = pair[0] %}
+              {% set row = pair[1] %}
+              <div class="mb-2">
+                <span class="text-xs text-gray-500">Row #{{ idx }}</span>
+                <pre class="whitespace-pre-wrap">{{ row }}</pre>
+              </div>
+            {% else %}
+              <pre class="whitespace-pre-wrap">{{ pair }}</pre>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+  {% endif %}
+
+  <div class="mt-4 text-right">
+    <a href="/ph" class="text-sm text-indigo-600 hover:underline">Back to history</a>
+  </div>
+</div>

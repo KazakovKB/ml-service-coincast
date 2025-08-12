@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block title %}Welcome · ML-Service-Coincast{% endblock %}
+
+{% block content %}
+<section class="py-16 text-center">
+  <h1 class="text-3xl font-bold tracking-tight">Welcome to Coincast ML Service</h1>
+  <p class="mt-4 text-gray-600 max-w-2xl mx-auto">
+    Upload datasets, get instant model predictions and pay only for processed rows.
+    Manage your balance, transaction history and past predictions — all in one place.
+  </p>
+
+  <div class="mt-8 flex items-center justify-center gap-3">
+    {% if authed %}
+      <a href="/balance"
+         class="rounded-md bg-indigo-600 px-5 py-2.5 text-white hover:bg-indigo-700">
+        Balance
+      </a>
+      <a href="/predict"
+         class="rounded-md bg-gray-100 px-5 py-2.5 text-gray-900 hover:bg-gray-200">
+        Predict
+      </a>
+    {% else %}
+      <a href="/login"
+         class="rounded-md bg-indigo-600 px-5 py-2.5 text-white hover:bg-indigo-700">
+        Log in
+      </a>
+      <a href="/register"
+         class="rounded-md bg-gray-100 px-5 py-2.5 text-gray-900 hover:bg-gray-200">
+        Create account
+      </a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

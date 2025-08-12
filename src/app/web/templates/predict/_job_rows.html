@@ -1,0 +1,23 @@
+<tbody id="history-body">
+  {% for j in jobs %}
+    <tr class="border-b last:border-0">
+      <td class="px-3 py-2 text-sm text-gray-600">{{ j.created_at[:19] if j.created_at else '' }}</td>
+      <td class="px-3 py-2 text-sm">{{ j.model_name }}</td>
+      <td class="px-3 py-2">
+        <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium
+        {% if j.status == 'OK' %} bg-green-100 text-green-800
+        {% elif j.status == 'ERROR' %} bg-red-100 text-red-800
+        {% else %} bg-yellow-100 text-yellow-800
+        {% endif %}">{{ j.status }}</span>
+      </td>
+      <td class="px-3 py-2 text-sm tabular-nums">{{ j.cost or 0 }}</td>
+      <td class="px-3 py-2 text-right">
+        <a href="/job/{{ j.id }}" class="text-sm text-indigo-600 hover:underline">View</a>
+      </td>
+    </tr>
+  {% else %}
+    <tr>
+      <td colspan="5" class="px-3 py-6 text-center text-sm text-gray-500">No jobs yet.</td>
+    </tr>
+  {% endfor %}
+</tbody>

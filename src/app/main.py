@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.app.api import router as api_router
+from src.app.web import router as web_router
 from src.app.infra.mq import start_broker, stop_broker
 
 app = FastAPI(
@@ -20,7 +21,8 @@ app.add_middleware(
 )
 
 #  Подключаем все роутеры
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
+app.include_router(web_router)
 
 @app.on_event("startup")
 async def _mq_start():

@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+{% block title %}Prediction History · ML-Service-Coincast{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex items-center justify-between">
+  <h2 class="text-2xl font-semibold">Prediction history</h2>
+  <a href="/predict"
+     class="rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
+    New prediction
+  </a>
+</div>
+
+<div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+  <table class="min-w-full divide-y">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Created</th>
+        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Model</th>
+        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
+        <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Cost</th>
+        <th class="px-3 py-2"></th>
+      </tr>
+    </thead>
+
+    <tbody id="history-body"
+           hx-get="/ph/partial"
+           hx-trigger="load, every 5s"
+           hx-swap="outerHTML">
+      <tr>
+        <td colspan="5" class="px-3 py-6 text-center text-sm text-gray-500">
+          Loading…
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
