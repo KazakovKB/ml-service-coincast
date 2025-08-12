@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block title %}Run prediction · ML-Service-Coincast{% endblock %}
+
+{% block content %}
+<h2 class="text-2xl font-semibold mb-6">Run prediction from file</h2>
+
+{% if error %}
+  <div class="mb-4 rounded-lg bg-red-100 border border-red-400 text-red-700 p-3">
+    {{ error }}
+  </div>
+{% endif %}
+
+<form method="post" action="/predict" enctype="multipart/form-data" class="space-y-4 max-w-2xl">
+  <div>
+    <label for="model_name" class="block mb-1 text-sm font-medium text-gray-700">
+      Model
+    </label>
+    <select id="model_name" name="model_name" required
+            class="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      {% for m in models %}
+        <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label for="file" class="block mb-1 text-sm font-medium text-gray-700">
+      File (CSV / Parquet / XLSX / JSON)
+    </label>
+    <input id="file" name="file" type="file"
+           accept=".csv,.parquet,.pq,.xlsx,.json,text/csv,application/parquet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json"
+           required
+           class="w-full border border-gray-300 rounded-md p-2"/>
+    <p class="mt-2 text-xs text-gray-500">
+      Файл должен содержать колонку времени: <code>timestamp</code>, <code>ts</code>,
+      <code>date</code>, <code>datetime</code> или <code>time</code>.
+    </p>
+  </div>
+
+  <button type="submit"
+          class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+    Predict
+  </button>
+</form>
+{% endblock %}
+

@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block title %}Job #{{ job.id }} · ML-Service-Coincast{% endblock %}
+
+{% block content %}
+  <div class="mb-4">
+    <a href="/ph" class="text-sm text-gray-600 hover:text-gray-900">← Back to history</a>
+  </div>
+
+  <h2 class="text-2xl font-semibold mb-1">Prediction job #{{ job.id }}</h2>
+  <p class="text-sm text-gray-500 mb-6">
+    {% if job.created_at %}Created: {{ job.created_at[:16] }}{% endif %}
+  </p>
+
+  {% include "predict/_job_card.html" %}
+{% endblock %}

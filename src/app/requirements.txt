@@ -9,3 +9,7 @@ python-multipart==0.0.20
 aio-pika==9.5.7
 backoff==2.2.1
 faststream[rabbit]==0.5.48
+Jinja2==3.1.6
+pyarrow==21.0.0
+openpyxl==3.1.5
+httpx==0.28.1

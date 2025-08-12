@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru" class="h-full bg-gray-100">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>{% block title %}ML-Service-Coincast{% endblock %}</title>
+
+    <link rel="icon" href="/static/favicon.ico">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://unpkg.com/htmx.org@2.0.6" defer></script>
+
+    {% block head %}{% endblock %}
+  </head>
+
+  <body class="min-h-full flex flex-col">
+    <header class="bg-white/90 backdrop-blur border-b border-gray-200">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="h-14 flex items-center justify-between">
+          <a href="/" class="flex items-center gap-2 font-semibold text-gray-900">
+            <span class="hidden sm:inline-block h-2 w-2 rounded-full bg-indigo-600"></span>
+            <span>ML-Service-Coincast</span>
+          </a>
+
+          <nav class="hidden sm:flex items-center gap-6 text-sm text-gray-700">
+            <a href="/balance"  class="hover:text-indigo-600">Баланс</a>
+            <a href="/tx"       class="hover:text-indigo-600">Транзакции</a>
+            <a href="/predict"  class="hover:text-indigo-600">Предикт</a>
+            <a href="/ph"       class="hover:text-indigo-600">История</a>
+            <a href="/logout"   class="text-red-600 hover:text-red-700">Выйти</a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <div id="hx-indicator" class="htmx-indicator fixed top-3 right-3 z-50">
+      <div class="rounded-lg bg-gray-900 text-white px-3 py-1 text-sm shadow">
+        Загружаем…
+      </div>
+    </div>
+
+    <div id="flash-zone" class="container mx-auto px-4 sm:px-6 lg:px-8 mt-4"></div>
+
+    <main id="content" class="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-gray-200 bg-white">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-500">
+        © Coincast • Demo UI
+      </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

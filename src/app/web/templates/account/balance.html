@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block title %}Balance · ML-Service-Coincast{% endblock %}
+
+{% block content %}
+  {% if message %}
+    {% include "partials/_alert.html" %}
+  {% endif %}
+
+  <h2 class="mb-6 text-2xl font-semibold">Your balance</h2>
+
+  <div class="mx-auto mb-8 max-w-md rounded-lg bg-white p-6 shadow">
+    <p class="mb-2 text-sm text-gray-600">Current balance</p>
+    <p class="text-4xl font-bold text-green-600">{{ balance }}</p>
+  </div>
+
+  <div class="mx-auto max-w-md">
+    <h3 class="mb-2 text-lg font-medium">Top-up credits</h3>
+    <form method="post" action="/topup" class="flex space-x-2">
+      <input
+        name="amount"
+        type="number"
+        min="1"
+        placeholder="Amount"
+        required
+        class="flex-grow rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:ring-blue-500"
+      />
+      <button
+        type="submit"
+        class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+      >
+        Add
+      </button>
+    </form>
+
+    <div class="mt-4 text-sm">
+      <a href="/predict" class="text-indigo-600 hover:underline">Run a prediction →</a>
+    </div>
+  </div>
+{% endblock %}
