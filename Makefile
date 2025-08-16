@@ -16,4 +16,4 @@ init-db:
 down:
 	docker compose down
 
-all: up tests init-db
+all: up init-db tests
