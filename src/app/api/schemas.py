@@ -26,6 +26,7 @@ class PredictionOut(BaseModel):
     id: int
     model_name: str
     predictions: List[Any]
+    valid_input: List[Any]
     invalid_rows: List[Tuple[int, Any]]
     cost: int
     created_at: datetime

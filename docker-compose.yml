@@ -96,8 +96,14 @@ services:
     volumes:
       - ./src:/src/src
     depends_on:
-      - database
-      - rabbitmq
+      app:
+        condition: service_started
+      worker:
+        condition: service_started
+      database:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   pgdata:

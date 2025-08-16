@@ -1,212 +1,165 @@
-import pytest
-from src.app.infra.db import SessionLocal, DATABASE_URL
-from sqlalchemy import create_engine
-from src.app.infra.models import ORMUser, ORMAccount, ORMTransaction, ORMPredictionJob, Base, TxType
-from src.app.domain.user import Client, Admin
-from src.app.domain.account import Account
+import os, time, uuid, httpx, pytest
 
-# Фикстура для сессии
+API_BASE = os.getenv("API_BASE")
+
+def _auth(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+def _wait_api_ready(timeout: float = 90.0) -> None:
+    """Ждём пока API оживёт, проверяем /models/."""
+    deadline = time.time() + timeout
+    last_err = None
+    with httpx.Client(base_url=API_BASE, timeout=5.0) as c:
+        while time.time() < deadline:
+            try:
+                r = c.get("/models/")
+                if r.status_code == 200:
+                    return
+                last_err = f"/models/ -> {r.status_code}"
+            except Exception as e:
+                last_err = e
+            time.sleep(1.0)
+    raise RuntimeError(f"API not ready: {last_err}")
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_ready():
+    _wait_api_ready()
+
 @pytest.fixture
-def db():
-    session = SessionLocal()
-    yield session
-    session.close()
+def client():
+    with httpx.Client(base_url=API_BASE, timeout=10.0) as c:
+        yield c
 
-# инициализация таблиц
-@pytest.fixture(scope="function", autouse=True)
-def prepare_schema():
-    engine = create_engine(DATABASE_URL)
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
+def _register_or_login(c: httpx.Client, email: str, password: str = "pass1234") -> str:
+    r = c.post("/auth/register", json={"email": email, "password": password})
+    if r.status_code in (200, 201):
+        return r.json()["access_token"]
+    r = c.post("/auth/login", data={"username": email, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["access_token"]
 
-def transaction_record(user: Client, account_id: int):
-    last_tx = user.account.history[-1]
-    return ORMTransaction(
-        amount=last_tx.amount,
-        tx_type=last_tx.tx_type,
-        reason=last_tx.reason,
-        balance_after=last_tx.balance_after,
-        account_id=account_id
-    )
+def _poll_job(c: httpx.Client, token: str, job_id: int, timeout: float = 40.0, interval: float = 0.5) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = c.get(f"/predict/{job_id}", headers=_auth(token))
+        if r.status_code == 200:
+            job = r.json()
+            if job.get("status") in ("OK", "ERROR"):
+                return job
+        time.sleep(interval)
+    raise AssertionError("Job did not finish in time")
 
-def create_user(user: Client):
-    orm_user = ORMUser(
-        email=user.email,
-        password=user.password,
-        role=user.role
-    )
+def test_auth_endpoints_and_unauthorized(client: httpx.Client):
+    email = f"user_{uuid.uuid4().hex[:8]}@test.local"
+    token = _register_or_login(client, email)
 
-    return orm_user
+    r = client.get("/account/balance", headers=_auth(token))
+    assert r.status_code == 200
+    assert "balance" in r.json()
 
-def test_user_creation_and_account(db):
+    r = client.get("/account/balance")
+    assert r.status_code in (401, 403)
 
-    user = Client(email="testuser@example.com", password=Client.hash_password("pass"))
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+def test_models_balance_top_up_transactions(client: httpx.Client):
+    email = f"user_{uuid.uuid4().hex[:8]}@test.local"
+    token = _register_or_login(client, email)
 
-    orm_account = ORMAccount(
-        balance=user.account.balance,
-        owner_id=orm_user.id
-    )
-    db.add(orm_account)
-    db.commit()
-    db.refresh(orm_account)
-    user.account.id = orm_account.id
+    r = client.get("/models/")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
 
-    assert orm_user.email == "testuser@example.com"
-    assert orm_account.balance == 0
+    r = client.get("/account/balance", headers=_auth(token))
+    assert r.status_code == 200
+    start_bal = r.json()["balance"]
 
-def test_deposit_by_user(db):
-    user = Client(email="user@example.com", password=Client.hash_password("pass"))
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+    topup = 123
+    r = client.post("/account/top-up", headers=_auth(token), json={"amount": topup, "reason": "tests"})
+    assert r.status_code == 201
+    new_bal = r.json()["balance"]
+    assert new_bal == start_bal + topup
 
-    orm_account = ORMAccount(balance=user.account.balance, owner_id=orm_user.id)
-    db.add(orm_account)
-    db.commit()
-    db.refresh(orm_account)
-    user.account.id = orm_account.id
+    r = client.get("/account/transactions", headers=_auth(token))
+    assert r.status_code == 200
+    txs = r.json()
+    assert isinstance(txs, list) and len(txs) >= 1
+    last = txs[0]
+    assert last["amount"] == topup
+    assert last["balance_after"] == new_bal
 
-    # Пополнение баланса пользователем
-    user.account.apply(delta=200, reason="User top-up", tx_type=TxType.DEPOSIT)
-    orm_account.balance = user.account.balance
-    orm_tx = transaction_record(user, orm_account.id)
-    db.add(orm_tx)
-    db.commit()
-    db.refresh(orm_account)
+def test_prediction_flow(client: httpx.Client):
 
-    assert orm_account.balance == 200
-    txs = db.query(ORMTransaction).filter_by(account_id=orm_account.id).all()
-    assert len(txs) == 1
-    assert txs[0].amount == 200
-    assert txs[0].tx_type == TxType.DEPOSIT
+    email = f"user_{uuid.uuid4().hex[:8]}@test.local"
+    token = _register_or_login(client, email)
 
-def test_deposit_by_admin(db):
-    admin = Admin(email="admin@example.com", password=Admin.hash_password("admin123"))
-    user = Client(email="user@example.com", password=Client.hash_password("user123"))
+    r = client.post("/account/top-up", headers=_auth(token), json={"amount": 1000, "reason": "tests"})
+    assert r.status_code == 201
 
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+    rows = [{"f1": 1, "f2": 2}, {"f1": 3, "f2": 4}]
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": rows})
+    assert r.status_code == 202, r.text
+    job_short = r.json()
+    assert "id" in job_short
+    job_id = job_short["id"]
 
-    orm_account = ORMAccount(balance=user.account.balance, owner_id=orm_user.id)
-    db.add(orm_account)
-    db.commit()
-    db.refresh(orm_account)
-    user.account.id = orm_account.id
+    job = _poll_job(client, token, job_id)
+    assert job["status"] == "OK"
 
-    # Пополнение баланса админом
-    admin.credit_user(user, amount=300, reason="Admin top-up")
-    orm_account.balance = user.account.balance
-    orm_tx = transaction_record(user, orm_account.id)
-    db.add(orm_tx)
-    db.commit()
-    db.refresh(orm_account)
+    preds = job.get("predictions")
+    assert isinstance(preds, list)
 
-    assert orm_account.balance == 300
-    txs = db.query(ORMTransaction).filter_by(account_id=orm_account.id).all()
-    assert len(txs) == 1
-    assert txs[0].reason == "Admin top-up"
-    assert txs[0].tx_type == TxType.DEPOSIT
+    valid_cnt = len(job.get("valid_input"))
+    assert len(preds) == valid_cnt
+    assert job.get("cost") >= 0
 
-def test_charge_for_prediction(db):
-    user = Client(email="user@example.com", password=Client.hash_password("pass"))
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+def test_validation_and_edge_cases(client: httpx.Client):
 
-    user.account.apply(delta=150, reason='User top-up', tx_type=TxType.DEPOSIT)
-    orm_account = ORMAccount(balance=user.account.balance, owner_id=orm_user.id)
-    db.add(orm_account)
-    db.commit()
-    db.refresh(orm_account)
-    user.account.id = orm_account.id
+    email = f"user_{uuid.uuid4().hex[:8]}@test.local"
+    token = _register_or_login(client, email)
 
-    # Списание за предсказание
-    user.pay_for_prediction(cost=50, reason="prediction")
-    orm_account.balance = user.account.balance
-    orm_tx = transaction_record(user, orm_account.id)
-    db.add(orm_tx)
-    db.commit()
-    db.refresh(orm_account)
+    client.post("/account/top-up", headers=_auth(token), json={"amount": 200, "reason": "tests"})
 
-    assert orm_account.balance == 100
-    txs = db.query(ORMTransaction).filter_by(account_id=orm_account.id).all()
-    assert len(txs) == 1
-    assert txs[0].amount == -50
-    assert txs[0].tx_type == TxType.PREDICTION_CHARGE
+    data = [{"f1": 1, "f2": 2}, {"f1": "oops", "f2": 5}, {"f1": 10, "f2": 11}]
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": data})
+    assert r.status_code == 202
+    job_id = r.json()["id"]
 
-def test_transaction_history(db):
-    user = Client(email="user@example.com", password=Client.hash_password("pass"))
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+    job = _poll_job(client, token, job_id)
+    assert job["status"] == "OK"
 
-    orm_account = ORMAccount(balance=user.account.balance, owner_id=orm_user.id)
-    db.add(orm_account)
-    db.commit()
-    db.refresh(orm_account)
-    user.account.id = orm_account.id
+    invalid = job.get("invalid_rows")
+    preds   = job.get("predictions")
+    vrows   = job.get("valid_input")
+    assert len(preds) == len(vrows)
+    assert len(invalid) >= 1
 
-    # Пополнение
-    user.account.apply(delta=100, reason="User top-up", tx_type=TxType.DEPOSIT)
-    orm_account.balance = user.account.balance
-    db.add(transaction_record(user, orm_account.id))
-    db.commit()
-    db.refresh(orm_account)
-    # Списание
-    user.pay_for_prediction(cost=40, reason="prediction")
-    orm_account.balance = user.account.balance
-    db.add(transaction_record(user, orm_account.id))
-    db.commit()
-    db.refresh(orm_account)
+    r = client.get("/account/balance", headers=_auth(token))
+    bal = r.json()["balance"]
+    cost_per_row = int(os.getenv("COST_PER_ROW", "1"))
+    need_rows = bal // cost_per_row + 5
+    big = [{"x": 1, "y": 2}] * need_rows
 
-    txs = db.query(ORMTransaction).filter_by(account_id=orm_account.id).all()
-    assert len(txs) == 2
-    assert txs[0].tx_type == TxType.DEPOSIT
-    assert txs[1].tx_type == TxType.PREDICTION_CHARGE
-    assert txs[0].balance_after == 100
-    assert txs[1].balance_after == 60
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": big})
+    assert r.status_code == 402
 
-def test_prediction_job(db):
-    user = Client(email="user@example.com", password=Client.hash_password("pass"))
-    orm_user = create_user(user)
-    db.add(orm_user)
-    db.commit()
-    db.refresh(orm_user)
-    user.id = orm_user.id
-    user.account = Account(owner_id=user.id)
+def test_cannot_read_someone_else_job(client: httpx.Client):
+    token_a = _register_or_login(client, f"a_{uuid.uuid4().hex[:6]}@t.local")
+    client.post("/account/top-up", headers=_auth(token_a), json={"amount": 100, "reason": "tests"})
+    r = client.post("/predict/", headers=_auth(token_a), json={"model_name": "Demo", "data": [{"f1":1,"f2":2}]})
+    assert r.status_code == 202
+    job_id = r.json()["id"]
 
-    job = ORMPredictionJob(
-        owner_id=orm_user.id,
-        model_name="DemoModel",
-        valid_input=[{"feature1": 1, "feature2": 2}],
-        predictions=[0.75],
-        invalid_rows=[(2, {"feature1": None, "feature2": 3})],
-        cost=25
-    )
-    db.add(job)
-    db.commit()
+    token_b = _register_or_login(client, f"b_{uuid.uuid4().hex[:6]}@t.local")
+    r = client.get(f"/predict/{job_id}", headers=_auth(token_b))
+    assert r.status_code == 404
 
-    jobs = db.query(ORMPredictionJob).filter_by(owner_id=orm_user.id).all()
-    assert len(jobs) == 1
-    assert jobs[0].model_name == "DemoModel"
-    assert jobs[0].cost == 25
+def test_top_up_negative_amount(client: httpx.Client):
+    token = _register_or_login(client, f"neg_{uuid.uuid4().hex[:6]}@t.local")
+    r = client.post("/account/top-up", headers=_auth(token), json={"amount": -1, "reason": "tests"})
+    assert r.status_code in (400, 422)
+
+def test_predict_invalid_payload_structure(client: httpx.Client):
+    token = _register_or_login(client, f"inv_{uuid.uuid4().hex[:6]}@t.local")
+    client.post("/account/top-up", headers=_auth(token), json={"amount": 50, "reason": "tests"})
+
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": "oops"})
+    assert r.status_code in (400, 422)
