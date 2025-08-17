@@ -6,6 +6,7 @@ from src.app.domain.account import Account
 from src.app.domain.prediction import PredictionJob
 from src.app.domain.validation import Validator
 from src.app.infra.repositories import AccountRepo, PredictionRepo
+from src.app.services.model_gateway import ModelGateway
 
 COST_PER_ROW: int = int(os.getenv("COST_PER_ROW"))
 
@@ -15,16 +16,15 @@ class PredictionService:
     class NotEnoughCredits(Exception): ...
     class ModelError(Exception): ...
 
-    def __init__(self, acc_repo: AccountRepo, pred_repo: PredictionRepo):
+    def __init__(self, acc_repo: AccountRepo, pred_repo: PredictionRepo, model_gateway: ModelGateway | None = None):
         self._acc_repo  = acc_repo
         self._pred_repo = pred_repo
         self._validator = Validator()
+        self._models = model_gateway or ModelGateway()
 
-    # вызов модели (заглушка)
     def _run_model(self, name: str, rows: list[dict]) -> list[float]:
         try:
-            # TODO: заменить на gRPC реальной модели
-            return [0.0] * len(rows)
+            return self._models.predict(name, rows)
         except Exception as exc:
             raise PredictionService.ModelError(str(exc)) from exc
 
@@ -66,15 +66,30 @@ class PredictionService:
         model_name: str,
         raw_rows: List[Dict[str, Any]],
     ) -> PredictionJob:
+        """
+        валидируем, создаём pending,
+        если валидных строк нет — помечаем ошибкой; иначе считаем, списываем, сохраняем OK.
+        """
         res = self._validator.validate(raw_rows)
 
         # создаём pending-запись сразу, чтобы всегда была история
         pending = self._pred_repo.create_pending(owner_id=user.id, model_name=model_name)
 
+        # Жёсткое требование: dataset должен содержать колонку времени и цену
+        if not res.valid_rows:
+            self._pred_repo.mark_error(
+                pending.id,
+                "no_valid_rows: dataset must contain a time (date/datetime) and a numeric price"
+            )
+            return self._pred_repo.get(pending.id)
+
         session = self._acc_repo.session
         with session.begin_nested():
             try:
                 preds = self._run_model(model_name, res.valid_rows)
+                if len(preds) != len(res.valid_rows):
+                    raise PredictionService.ModelError("Model returned wrong number of predictions")
+
                 self._charge_and_save_ok(
                     account_id=user.account.id,
                     job_id=pending.id,
@@ -96,13 +111,27 @@ class PredictionService:
         model_name: str,
         raw_rows: List[Dict[str, Any]],
     ) -> PredictionJob:
-        """Воркер валидирует, инференсит, списывает и помечает job OK/ERROR."""
+        """
+        Воркер: валидирует вход, при отсутствии валидных строк помечает ошибкой,
+        иначе делает инференс, списывает и помечает job OK/ERROR.
+        """
         res = self._validator.validate(raw_rows)
+
+        # Жёсткое требование: time+price обязательны
+        if not res.valid_rows:
+            self._pred_repo.mark_error(
+                job_id,
+                "no_valid_rows: dataset must contain a time (date/datetime) and a numeric price"
+            )
+            return self._pred_repo.get(job_id)
 
         session = self._acc_repo.session
         with session.begin_nested():
             try:
                 preds = self._run_model(model_name, res.valid_rows)
+                if len(preds) != len(res.valid_rows):
+                    raise PredictionService.ModelError("Model returned wrong number of predictions")
+
                 self._charge_and_save_ok(
                     account_id=account_id,
                     job_id=job_id,
@@ -112,7 +141,6 @@ class PredictionService:
                     predictions=preds,
                 )
             except PredictionService.NotEnoughCredits:
-                # уже помечено как error в _charge_and_save_ok
                 raise
             except PredictionService.ModelError as err:
                 self._pred_repo.mark_error(job_id, str(err))

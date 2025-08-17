@@ -1,6 +1,7 @@
 from typing import Sequence, Tuple, Any, Dict, List, Optional
 from dataclasses import dataclass
-import logging, math
+from datetime import datetime, UTC
+import logging, math, re
 
 logging.basicConfig(level=logging.INFO)
 
@@ -11,22 +12,53 @@ class ValidationResult:
 
 
 class Validator:
-    """Разделить валидные и ошибочные записи и нормализовать числовые поля."""
+    """Требует time+price, нормализует в {timestamp, price}, сортирует по времени."""
 
-    # имена временной колонки (регистр игнорируем)
+    # допустимые имена временной колонки (без учёта регистра)
     TIME_KEYS = {"timestamp", "ts", "date", "datetime", "time"}
+    # допустимые имена цены (без учёта регистра)
+    PRICE_KEYS = {"price", "value", "target", "close", "y"}
+    _THOUSANDS_RE = re.compile(r"[ _]")
 
     @staticmethod
-    def _maybe_float(v: Any) -> Optional[float]:
-        """Пробует привести значение к float, возвращает None если нельзя или не конечное."""
+    def _parse_dt(v: Any) -> Optional[datetime]:
         if v is None:
             return None
-        if isinstance(v, (int, float)):
-            return float(v) if math.isfinite(float(v)) else None
+        if isinstance(v, (int, float)):  # unix epoch seconds
+            try:
+                return datetime.fromtimestamp(float(v), UTC)
+            except Exception:
+                return None
         if isinstance(v, str):
             s = v.strip()
             if not s:
                 return None
+            for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f",):
+                try:
+                    return datetime.fromisoformat(s) if "T" in s or "-" in s else datetime.strptime(s, fmt)
+                except Exception:
+                    pass
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def _maybe_float(cls, v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            try:
+                x = float(v)
+                return x if math.isfinite(x) else None
+            except Exception:
+                return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            s = cls._THOUSANDS_RE.sub("", s)
             if "," in s and "." not in s:
                 s = s.replace(",", ".")
             try:
@@ -43,37 +75,34 @@ class Validator:
 
         for idx, row in enumerate(raw):
             if not isinstance(row, dict):
-                invalid_rows.append((idx, {"_error": "not a dict", "value": row}))
+                invalid_rows.append((idx, {"_error": "not_a_dict", "value": row}))
                 continue
 
-            # выделяем колонку времени
-            time_key = next((k for k in row.keys() if k.lower() in cls.TIME_KEYS), None)
+            # ищем ключи времени/цены
+            time_key  = next((k for k in row.keys() if k.lower() in cls.TIME_KEYS), None)
+            price_key = next((k for k in row.keys() if k.lower() in cls.PRICE_KEYS), None)
 
-            normalized: Dict[str, Any] = {}
-            if time_key is not None:
-                normalized[time_key] = row[time_key]
+            if time_key is None:
+                invalid_rows.append((idx, {"_error": "missing_time", **row}))
+                continue
+            if price_key is None:
+                invalid_rows.append((idx, {"_error": "missing_price", **row}))
+                continue
 
-            ok = True
-            numeric_fields = 0
+            dt = cls._parse_dt(row.get(time_key))
+            if dt is None:
+                invalid_rows.append((idx, {"_error": "bad_time", **row}))
+                continue
 
-            for k, v in row.items():
-                if k == time_key:
-                    continue
-                fv = cls._maybe_float(v)
-                if fv is None:
-                    ok = False
-                    break
-                normalized[k] = fv
-                numeric_fields += 1
+            price = cls._maybe_float(row.get(price_key))
+            if price is None:
+                invalid_rows.append((idx, {"_error": "bad_price", **row}))
+                continue
 
-            # нужны хотя бы какие-то числовые признаки
-            if ok and numeric_fields > 0:
-                valid_rows.append(normalized)
-            else:
-                invalid_rows.append((idx, row))
+            valid_rows.append({"timestamp": dt.isoformat(), "price": float(price)})
 
-        logging.info(
-            "Validator: %d valid, %d invalid",
-            len(valid_rows), len(invalid_rows)
-        )
+        # сортировка по времени
+        valid_rows.sort(key=lambda r: r["timestamp"])
+
+        logging.info("Validator: %d valid, %d invalid", len(valid_rows), len(invalid_rows))
         return ValidationResult(valid_rows=valid_rows, invalid_rows=invalid_rows)

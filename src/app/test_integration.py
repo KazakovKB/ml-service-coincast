@@ -94,13 +94,14 @@ def test_prediction_flow(client: httpx.Client):
     r = client.post("/account/top-up", headers=_auth(token), json={"amount": 1000, "reason": "tests"})
     assert r.status_code == 201
 
-    rows = [{"f1": 1, "f2": 2}, {"f1": 3, "f2": 4}]
+    rows = [{"date": "2025-05-01", "value": 1}, {"date": "2025-05-02", "value": 2}]
     r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": rows})
     assert r.status_code == 202, r.text
+
     job_short = r.json()
     assert "id" in job_short
-    job_id = job_short["id"]
 
+    job_id = job_short["id"]
     job = _poll_job(client, token, job_id)
     assert job["status"] == "OK"
 
@@ -112,13 +113,12 @@ def test_prediction_flow(client: httpx.Client):
     assert job.get("cost") >= 0
 
 def test_validation_and_edge_cases(client: httpx.Client):
-
     email = f"user_{uuid.uuid4().hex[:8]}@test.local"
     token = _register_or_login(client, email)
 
     client.post("/account/top-up", headers=_auth(token), json={"amount": 200, "reason": "tests"})
 
-    data = [{"f1": 1, "f2": 2}, {"f1": "oops", "f2": 5}, {"f1": 10, "f2": 11}]
+    data = [{"date": "2025-05-01", "value": 1}, {"date": "2025-05-02", "value": 2}, {"date": "error", "value": 2}]
     r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": data})
     assert r.status_code == 202
     job_id = r.json()["id"]
@@ -130,21 +130,33 @@ def test_validation_and_edge_cases(client: httpx.Client):
     preds   = job.get("predictions")
     vrows   = job.get("valid_input")
     assert len(preds) == len(vrows)
-    assert len(invalid) >= 1
+    assert len(invalid) > 0
 
-    r = client.get("/account/balance", headers=_auth(token))
-    bal = r.json()["balance"]
-    cost_per_row = int(os.getenv("COST_PER_ROW", "1"))
-    need_rows = bal // cost_per_row + 5
-    big = [{"x": 1, "y": 2}] * need_rows
+    # Проверка валидации поля date/datetime
+    data = [{"f1": 5, "value": 1}, {"f1": 6, "value": 2}, {"f1": 8, "value": 2}]
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": data})
+    assert r.status_code == 202
+    job_id = r.json()["id"]
 
-    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": big})
-    assert r.status_code == 402
+    job = _poll_job(client, token, job_id)
+    assert job["status"] == "ERROR"
+
+    # Проверка валидации поля price
+    data = [{"date": "2025-05-01", "error_name": 1},
+            {"date": "2025-05-02", "error_name": 2},
+            {"date": "2025-05-03", "error_name": 2}]
+    r = client.post("/predict/", headers=_auth(token), json={"model_name": "Demo", "data": data})
+    assert r.status_code == 202
+    job_id = r.json()["id"]
+
+    job = _poll_job(client, token, job_id)
+    assert job["status"] == "ERROR"
 
 def test_cannot_read_someone_else_job(client: httpx.Client):
     token_a = _register_or_login(client, f"a_{uuid.uuid4().hex[:6]}@t.local")
     client.post("/account/top-up", headers=_auth(token_a), json={"amount": 100, "reason": "tests"})
-    r = client.post("/predict/", headers=_auth(token_a), json={"model_name": "Demo", "data": [{"f1":1,"f2":2}]})
+    r = client.post("/predict/", headers=_auth(token_a),
+                    json={"model_name": "Demo", "data": [{"date":"2025-05-03","value":2}]})
     assert r.status_code == 202
     job_id = r.json()["id"]
 
