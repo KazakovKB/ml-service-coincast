@@ -36,10 +36,11 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping || exit 1"]
       interval: 5s
       timeout: 4s
-      retries: 10
+      retries: 20
+      start_period: 10s
     restart: unless-stopped
 
   database:
@@ -96,14 +97,10 @@ services:
     volumes:
       - ./src:/src/src
     depends_on:
-      app:
-        condition: service_started
-      worker:
-        condition: service_started
-      database:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
+      - database
+      - rabbitmq
+      - app
+      - worker
 
 volumes:
   pgdata:

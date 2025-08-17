@@ -1,19 +1,25 @@
-.PHONY: up tests init-db down all
+.PHONY: up wait init-db tests down all
 
-# Поднять все сервисы (без init-db и tests)
+export COMPOSE_PROJECT_NAME := ml-service-coincast
+
 up:
-	docker compose up -d --build database rabbitmq app web-proxy bot worker
+	docker compose up -d database rabbitmq app web-proxy bot worker
 
-# Запустить тесты
-tests:
-	docker compose run --rm tests
+wait: up
+	# ждём Postgres
+	docker compose exec -T database sh -c 'until pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1; do sleep 1; done'
+	# ждём RabbitMQ
+	docker compose exec -T rabbitmq sh -c 'rabbitmq-diagnostics -q ping'
 
-# Проинициализировать базу демо-данными
-init-db:
-	docker compose run --rm init-db
+# Инициализация демо-данных
+init-db: wait
+	docker compose run --rm --no-deps init-db
 
-# Остановить и удалить все сервисы
+# Тесты
+tests: init-db
+	docker compose run --rm --no-deps tests
+
 down:
-	docker compose down
+	docker compose down -v --remove-orphans
 
-all: up init-db tests
+all: tests

@@ -1,32 +1,22 @@
-import os
+import os, httpx
 from typing import Any, Dict, List
-
-import httpx
-
 
 API_BASE = os.getenv("API_BASE")
 
 class ApiError(Exception):
-    """HTTP-ошибка для бота."""
     def __init__(self, status: int, detail: str = ""):
         super().__init__(detail or str(status))
         self.status = status
         self.detail = detail
 
-
 class ApiClient:
-    """
-    обёртка над FastAPI-REST.
-    """
-
     def __init__(self) -> None:
         self._token: str | None = None
-        self._http = httpx.AsyncClient(base_url=API_BASE, timeout=10.0)
+        self._http = httpx.AsyncClient(base_url=API_BASE, timeout=15.0)
 
     async def _request(self, method: str, url: str, **kw) -> Any:
         if self._token:
             kw.setdefault("headers", {})["Authorization"] = f"Bearer {self._token}"
-
         try:
             resp = await self._http.request(method, url, **kw)
             resp.raise_for_status()
@@ -60,6 +50,9 @@ class ApiClient:
 
     async def transactions(self) -> List[Dict]:
         return await self._request("GET", "/account/transactions")
+
+    async def models(self) -> List[str]:
+        return await self._request("GET", "/models/")
 
     async def predict(self, model: str, rows: list[dict]) -> Dict:
         return await self._request("POST", "/predict/",
