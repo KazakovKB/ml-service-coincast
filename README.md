@@ -99,9 +99,18 @@ ml-service-coincast/
 │       │       ├── layout.html
 │       │       └── index.html
 │       │
+│       ├── tests/                  # Тесты
+│       │   ├── conftest.py      
+│       │   ├── test_account.py          
+│       │   ├── test_auth.py            
+│       │   ├── test_models.py         
+│       │   ├── test_prediction.py      
+│       │   ├── test_security.py
+│       │   └── test_validation.py   
+│       │
 │       ├── Dockerfile
 │       ├── main.py                # Точка входа FastAPI
-│       ├── test_integration.py
+│       ├── pytest.ini
 │       ├── init_db.py
 │       └── requirements.txt
 │       ... ...

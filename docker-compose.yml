@@ -93,7 +93,7 @@ services:
       dockerfile: src/app/Dockerfile
     env_file:
       - .env
-    command: pytest -q src/app/test_integration.py
+    command: pytest -q -ra
     volumes:
       - ./src:/src/src
     depends_on:
